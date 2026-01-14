@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Income Comparison</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/inter-ui/3.19.3/inter.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --surface: #ffffff;
+            --background: #f8fafc;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1, h2 {
+            margin-top: 0;
+            color: #0f172a;
+        }
+
+        .step {
+            display: none; /* Hidden by default */
+            animation: fadeIn 0.5s;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box; 
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        .nudge-box {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .highlight {
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .visual-bar {
+            height: 24px;
+            background: #e2e8f0;
+            border-radius: 12px;
+            margin: 2rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .visual-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80 0%, #2563eb 100%);
+            width: 0%;
+            transition: width 1.5s ease-out;
+        }
+
+        .marker {
+            position: absolute;
+            top: -25px;
+            transform: translateX(-50%);
+            font-size: 0.875rem;
+            font-weight: bold;
+            transition: left 1.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="step-1" class="step active">
+        <h2>Global Income Comparison</h2>
+        <p>Please enter your household information to see where you stand in the global income distribution.</p>
+        
+        <label for="income">Annual Household Income (Post-tax, USD)</label>
+        <input type="number" id="income" placeholder="e.g. 50000">
+
+        <label for="adults">Number of Adults in Household</label>
+        <input type="number" id="adults" value="1">
+
+        <label for="children">Number of Children in Household</label>
+        <input type="number" id="children" value="0">
+
+        <button onclick="calculateAndShowNudge()">Calculate My Rank</button>
+    </div>
+
+    <div id="step-2" class="step">
+        <h2>Your Result</h2>
+        
+        <div class="visual-bar">
+            <div id="marker-text" class="marker" style="left: 0%">You</div>
+            <div id="fill-bar" class="visual-fill"></div>
+        </div>
+
+        <div class="nudge-box">
+            <p id="nudge-text"></p>
+        </div>
+
+        <p>Knowing this, would you like to make a donation to the <strong>Against Malaria Foundation</strong>?</p>
+        <p style="font-size: 0.9rem; color: #64748b;">The AMF distributes insecticide-treated bed nets to prevent malaria. It is rated as one of the most effective charities in the world.</p>
+
+        <label for="donation">Donation Amount (USD)</label>
+        <input type="number" id="donation" placeholder="e.g. 50">
+
+        <button onclick="submitDonation()">Proceed to Donate</button>
+        <div style="text-align: center; margin-top: 1rem;">
+            <a href="#" onclick="location.reload()" style="color: #64748b; font-size: 0.875rem;">Start Over</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    
+    // NOTE: This is placeholder data approximating the curve. 
+    // YOU MUST REPLACE THIS with the actual WID 2024 percentile cut-offs used in Experiment 2.
+    // Format: [Percentile (0-100), Annual Income Threshold (USD)]
+    const globalDistribution = [
+        { p: 10, income: 1000 },
+        { p: 20, income: 1500 },
+        { p: 30, income: 2200 },
+        { p: 40, income: 3000 },
+        { p: 50, income: 4500 }, // Approx Global Median
+        { p: 60, income: 7000 },
+        { p: 70, income: 11000 },
+        { p: 80, income: 18000 },
+        { p: 90, income: 35000 },
+        { p: 95, income: 60000 },
+        { p: 99, income: 120000 }
+    ];
+
+    const GLOBAL_MEDIAN = 4500; // Replace with exact 2024 Global Median (Nominal or PPP)
+
+    function getPercentile(amount) {
+        // Simple lookup logic
+        for (let i = globalDistribution.length - 1; i >= 0; i--) {
+            if (amount >= globalDistribution[i].income) {
+                // Linear interpolation for smoother result between deciles
+                let lower = globalDistribution[i];
+                let upper = globalDistribution[i+1] || { p: 99.9, income: amount * 2 }; // Fallback for top 1%
+                
+                let range = upper.income - lower.income;
+                let progress = (amount - lower.income) / range;
+                let rank = lower.p + (progress * (upper.p - lower.p));
+                return Math.min(99.9, rank).toFixed(1);
+            }
+        }
+        return "1.0"; // Bottom 10% fallback
+    }
+
+    function calculateAndShowNudge() {
+        // 1. Get Inputs
+        const income = parseFloat(document.getElementById('income').value);
+        const adults = parseFloat(document.getElementById('adults').value);
+        const children = parseFloat(document.getElementById('children').value);
+
+        if (!income || !adults) {
+            alert("Please enter valid income and household details.");
+            return;
+        }
+
+        // 2. Equivalization Logic
+        // The paper mentions "per head" income in Figure 3.
+        // Standard "per capita" is Income / (Adults + Children).
+        // If your paper used a specific scale (like OECD-modified), update this formula.
+        // Experiment 2 instructions: "household's per head income" usually implies simple per capita.
+        const householdSize = adults + children;
+        const perHeadIncome = income / householdSize;
+
+        // 3. Calculate Rank & Median Multiple
+        const percentile = getPercentile(perHeadIncome);
+        const richerThan = percentile; 
+        const topPercent = (100 - percentile).toFixed(1);
+        const medianMultiple = (perHeadIncome / GLOBAL_MEDIAN).toFixed(1);
+
+        // 4. Update UI
+        // Mirroring text from Figure 6 (M&RBN Condition)
+        const nudgeText = `
+            Since you have a household income of <strong>$${income.toLocaleString()}</strong> 
+            in a household of <strong>${adults} adult/s</strong> and <strong>${children} children</strong>, 
+            you are richer than <span class="highlight">${richerThan}%</span> of people in the world.
+            <br><br>
+            In other words, you are in the richest <span class="highlight">${topPercent}%</span> of the global population.
+            <br><br>
+            In addition, your household's per head income is <span class="highlight">${medianMultiple} times</span> 
+            the global median income of a single person.
+        `;
+
+        document.getElementById('nudge-text').innerHTML = nudgeText;
+
+        // Visual Bar Animation
+        const fillBar = document.getElementById('fill-bar');
+        const marker = document.getElementById('marker-text');
+        
+        // Switch Steps
+        document.getElementById('step-1').classList.remove('active');
+        document.getElementById('step-2').classList.add('active');
+
+        // Trigger animation after render
+        setTimeout(() => {
+            fillBar.style.width = `${percentile}%`;
+            marker.style.left = `${percentile}%`;
+            marker.innerText = `Top ${topPercent}%`;
+        }, 100);
+    }
+
+    function submitDonation() {
+        const amount = document.getElementById('donation').value;
+        if(amount) {
+            // Redirect to actual AMF donation page with amount pre-filled if possible, 
+            // or just a thank you message for the field experiment.
+            alert(`Thank you! In a live version, you would now be redirected to donate $${amount} to AMF.`);
+            // location.href = "https://www.againstmalaria.com/Donate.aspx"; 
+        } else {
+            alert("Please enter a donation amount.");
+        }
+    }
+</script>
+
+</body>
+</html>

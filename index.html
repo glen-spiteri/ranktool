@@ -173,15 +173,16 @@
 <script>
     // --- CONFIGURATION ---
     
-    // NOTE: This is placeholder data approximating the curve. 
-    // YOU MUST REPLACE THIS with the actual WID 2024 percentile cut-offs used in Experiment 2.
-    // Format: [Percentile (0-100), Annual Income Threshold (USD)]
+    // PASTE YOUR GOOGLE SCRIPT URL HERE
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbznWQ4qOhjQu95ouyzl8AkkeR72Llb7DHZhULAcBia3RGAvwggGEqBmQahg5MAPctD7WA/exec";
+
+    // REPLACE with exact 2024 WID data
     const globalDistribution = [
         { p: 10, income: 1000 },
         { p: 20, income: 1500 },
         { p: 30, income: 2200 },
         { p: 40, income: 3000 },
-        { p: 50, income: 4500 }, // Approx Global Median
+        { p: 50, income: 4500 }, 
         { p: 60, income: 7000 },
         { p: 70, income: 11000 },
         { p: 80, income: 18000 },
@@ -190,23 +191,31 @@
         { p: 99, income: 120000 }
     ];
 
-    const GLOBAL_MEDIAN = 4500; // Replace with exact 2024 Global Median (Nominal or PPP)
+    const GLOBAL_MEDIAN = 4500; 
+
+    // State variables to store data before sending
+    let sessionData = {
+        income: 0,
+        adults: 0,
+        children: 0,
+        perHead: 0,
+        percentile: 0,
+        medianMultiple: 0,
+        donation: 0
+    };
 
     function getPercentile(amount) {
-        // Simple lookup logic
         for (let i = globalDistribution.length - 1; i >= 0; i--) {
             if (amount >= globalDistribution[i].income) {
-                // Linear interpolation for smoother result between deciles
                 let lower = globalDistribution[i];
-                let upper = globalDistribution[i+1] || { p: 99.9, income: amount * 2 }; // Fallback for top 1%
-                
+                let upper = globalDistribution[i+1] || { p: 99.9, income: amount * 2 };
                 let range = upper.income - lower.income;
                 let progress = (amount - lower.income) / range;
                 let rank = lower.p + (progress * (upper.p - lower.p));
                 return Math.min(99.9, rank).toFixed(1);
             }
         }
-        return "1.0"; // Bottom 10% fallback
+        return "1.0"; 
     }
 
     function calculateAndShowNudge() {
@@ -220,26 +229,27 @@
             return;
         }
 
-        // 2. Equivalization Logic
-        // The paper mentions "per head" income in Figure 3.
-        // Standard "per capita" is Income / (Adults + Children).
-        // If your paper used a specific scale (like OECD-modified), update this formula.
-        // Experiment 2 instructions: "household's per head income" usually implies simple per capita.
         const householdSize = adults + children;
         const perHeadIncome = income / householdSize;
 
-        // 3. Calculate Rank & Median Multiple
+        // 2. Calculate Logic
         const percentile = getPercentile(perHeadIncome);
-        const richerThan = percentile; 
         const topPercent = (100 - percentile).toFixed(1);
         const medianMultiple = (perHeadIncome / GLOBAL_MEDIAN).toFixed(1);
 
+        // 3. Save to session state
+        sessionData.income = income;
+        sessionData.adults = adults;
+        sessionData.children = children;
+        sessionData.perHead = perHeadIncome.toFixed(2);
+        sessionData.percentile = percentile;
+        sessionData.medianMultiple = medianMultiple;
+
         // 4. Update UI
-        // Mirroring text from Figure 6 (M&RBN Condition)
         const nudgeText = `
             Since you have a household income of <strong>$${income.toLocaleString()}</strong> 
             in a household of <strong>${adults} adult/s</strong> and <strong>${children} children</strong>, 
-            you are richer than <span class="highlight">${richerThan}%</span> of people in the world.
+            you are richer than <span class="highlight">${percentile}%</span> of people in the world.
             <br><br>
             In other words, you are in the richest <span class="highlight">${topPercent}%</span> of the global population.
             <br><br>
@@ -248,16 +258,12 @@
         `;
 
         document.getElementById('nudge-text').innerHTML = nudgeText;
-
-        // Visual Bar Animation
         const fillBar = document.getElementById('fill-bar');
         const marker = document.getElementById('marker-text');
         
-        // Switch Steps
         document.getElementById('step-1').classList.remove('active');
         document.getElementById('step-2').classList.add('active');
 
-        // Trigger animation after render
         setTimeout(() => {
             fillBar.style.width = `${percentile}%`;
             marker.style.left = `${percentile}%`;
@@ -267,14 +273,39 @@
 
     function submitDonation() {
         const amount = document.getElementById('donation').value;
-        if(amount) {
-            // Redirect to actual AMF donation page with amount pre-filled if possible, 
-            // or just a thank you message for the field experiment.
-            alert(`Thank you! In a live version, you would now be redirected to donate $${amount} to AMF.`);
-            // location.href = "https://www.againstmalaria.com/Donate.aspx"; 
-        } else {
-            alert("Please enter a donation amount.");
+        if(!amount) {
+            alert("Please enter a donation amount (enter 0 if none).");
+            return;
         }
+
+        // Save donation to session
+        sessionData.donation = amount;
+
+        // Visual feedback that it's processing
+        const btn = document.querySelector("#step-2 button");
+        const originalText = btn.innerText;
+        btn.innerText = "Processing...";
+        btn.disabled = true;
+
+        // Send to Google Sheet
+        fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Important for Google Sheets
+            cache: 'no-cache',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(sessionData)
+        }).then(response => {
+            // Success
+            alert(`Thank you! Your data has been logged. You would now be redirected to donate $${amount}.`);
+            location.reload(); // Refresh the page for the next user
+        }).catch(error => {
+            console.error('Error:', error);
+            alert("There was an error saving your data, but thank you for participating.");
+            btn.innerText = originalText;
+            btn.disabled = false;
+        });
     }
 </script>
 
